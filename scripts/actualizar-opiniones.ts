@@ -79,7 +79,7 @@ async function deWordpress(base: string, medio: string, desde: string, consultas
   const campos = `after=${desde}T00:00:00&_fields=id,date_gmt,link,title,excerpt`
   const consultas = [`per_page=100&${campos}`, ...consultasExtra.map((q) => `${q}&per_page=30&${campos}`)]
   const errores: string[] = []
-  const listas = await Promise.all(
+  const listas: (WpPost[] | null)[] = await Promise.all(
     consultas.map((q) =>
       json<WpPost[]>(`${base}/wp-json/wp/v2/posts?${q}`).catch((e) => {
         errores.push((e as Error).message)
@@ -87,8 +87,20 @@ async function deWordpress(base: string, medio: string, desde: string, consultas
       }),
     ),
   )
-  if (listas.every((l) => l === null)) {
+  if (!listas.some((l) => l !== null)) {
     console.warn(`  · ${medio}: la API de WordPress no respondió (${errores.join('; ')})`)
+    if (base.includes('elcomercio.com')) {
+      // El Comercio bloquea a GitHub Actions: la lista se pide a nuestra función en Vercel
+      try {
+        const r = await json<{ notas: { id: number; url: string; titulo: string; fecha: string }[] }>('https://radar-electrico-ecuador.vercel.app/api/noticias')
+        console.log(`  · ${medio}: ${r.notas.length} notas listadas vía /api/noticias`)
+        listas.push(r.notas.map((n) => ({ id: n.id, date_gmt: n.fecha + 'T00:00:00', link: n.url, title: { rendered: n.titulo } })))
+      } catch (e) {
+        console.warn(`  · ${medio}: /api/noticias falló (${(e as Error).message})`)
+      }
+    }
+  }
+  if (!listas.some((l) => l !== null)) {
     if (rssRespaldo) return deRss(rssRespaldo, medio, desde, 6)
     throw new Error(errores[0] ?? 'sin respuesta')
   }
