@@ -8,7 +8,18 @@ Web-app interactiva e independiente sobre el estado de las hidroeléctricas de E
 
 No está afiliado a CNEL EP, CELEC EP, CENACE ni al Ministerio de Ambiente y Energía. Los datos son cifras oficiales publicadas por esas entidades y recogidas por la prensa; cada dato enlaza a su fuente.
 
-## Actualizar los datos
+## Datos en vivo (botón "Actualizar datos")
+
+La app llama a `/api/datos` (función serverless en `api/datos.ts`) al abrirse y cada vez que alguien pulsa **↻ Actualizar datos**:
+
+- **CENACE – Información Operativa** (oficial, cada 30 min): producción promedio por central, demanda máxima, importación de Colombia y pico térmico.
+- **Última cota de Mazar**: del reporte más reciente de El Comercio (CELEC no la publica en formato abierto).
+
+Con esos datos se ajustan los supuestos del modelo (cota inicial, caudal efectivo de Coca Codo, demanda pico, probabilidad de importación, capacidad térmica) y se vuelve a simular. La respuesta se guarda 30 min en la CDN de Vercel, así que muchos clics no saturan a las fuentes. Si una fuente falla, se usan los datos guardados.
+
+Las calificaciones de expertos y los mitos **no** se actualizan solos: requieren revisión humana.
+
+## Actualizar los datos guardados
 
 1. `src/data/sistema.ts`: fecha de corte, serie de cota de Mazar, estado actual (caudales, MW, demanda) y cronología.
 2. `src/data/expertos.ts`: nuevos pronósticos y su calificación (1 / 0.5 / 0 / null).
