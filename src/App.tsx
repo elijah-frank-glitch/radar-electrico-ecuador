@@ -1,8 +1,10 @@
-import { useDeferredValue, useEffect, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import Cuantitativo, { Horizontes, nivelDominante, useSimulacion } from './components/Cuantitativo'
 import Cualitativo from './components/Cualitativo'
 import { NIVELES, PARAMS_BASE, type Parametros } from './model/simulacion'
-import { FECHA_CORTE, estadoActual as E, umbrales, fuentes } from './data/sistema'
+import { FECHA_CORTE, estadoActual as E, umbrales, fuentes, serieMazar } from './data/sistema'
+import { aplicarDatos, pedirDatos, type Cambio, type DatosVivo } from './model/enVivo'
+import PanelVivo from './components/PanelVivo'
 import { mitos, VEREDICTOS, type Veredicto } from './data/mitos'
 
 function useTheme() {
@@ -18,19 +20,59 @@ function useTheme() {
   return { dark, toggle: () => setTheme(dark ? 'light' : 'dark') }
 }
 
-const fechaLarga = new Date(FECHA_CORTE + 'T12:00:00Z').toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+const fechaLargaDe = (f: string) => new Date(f + 'T12:00:00Z').toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 export default function App() {
   const { dark, toggle } = useTheme()
+  const [paramsBase, setParamsBase] = useState<Parametros>(PARAMS_BASE)
   const [params, setParams] = useState<Parametros>(PARAMS_BASE)
+  const [vivo, setVivo] = useState<DatosVivo | null>(null)
+  const [cambios, setCambios] = useState<Cambio[]>([])
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const actualizar = useCallback(async () => {
+    setCargando(true)
+    setError(null)
+    try {
+      const d = await pedirDatos()
+      const { params: p, cambios: c } = aplicarDatos(PARAMS_BASE, d)
+      setVivo(d)
+      setCambios(c)
+      setParamsBase(p)
+      setParams(p)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCargando(false)
+    }
+  }, [])
+  useEffect(() => { actualizar() }, [actualizar])
+
+  // Fecha de referencia: hoy en Ecuador si hay datos en vivo; si no, la fecha de corte guardada
+  const fechaRef = vivo ? new Date(vivo.consultado).toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' }) : FECHA_CORTE
+  const serie = useMemo(() => {
+    const m = vivo?.mazar
+    if (!m) return serieMazar
+    const f = new Date(m.fechaPublicacion).toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' })
+    const ult = serieMazar[serieMazar.length - 1]
+    if (f < ult.fecha || (f === ult.fecha && Math.abs(m.cota - ult.cota) < 0.005)) return serieMazar
+    return [...serieMazar.filter((p) => p.fecha !== f), { fecha: f, cota: m.cota, tipo: 'reportado' as const, nota: 'Dato en vivo', fuente: '' }]
+  }, [vivo])
+  const cotaHoy = serie[serie.length - 1].cota
+  const ccsHoy = vivo?.cenace?.plantasPromAyerMW['Coca Codo'] ?? E.generacionCCS
+  const demMax = vivo?.cenace ? Math.max(vivo.cenace.demandaMaxAyerMW, vivo.cenace.demandaMaxHoyMW) : E.demandaPicoRecord
+  const impHoy = vivo?.cenace ? vivo.cenace.importacionPromAyerMW : E.importacionPromedio
+
   const deferred = useDeferredValue(params)
   const res = useSimulacion(deferred)
-  const base = useSimulacion(PARAMS_BASE)
+  const base = useSimulacion(paramsBase)
   const h30 = base.horizontes.find((h) => h.dias === 30)!
   const pRes30 = h30.pPeor[2] + h30.pPeor[3]
   const [filtroMito, setFiltroMito] = useState<'todos' | Veredicto>('todos')
   const h7 = base.horizontes.find((h) => h.dias === 7)!
   const dom7 = nivelDominante(h7.pPeor)
+  const fechaLarga = fechaLargaDe(fechaRef)
 
   return (
     <>
@@ -44,6 +86,7 @@ export default function App() {
             <a href="#mitos">Mitos y bulos</a>
             <a href="#metodo">Metodología</a>
           </nav>
+          <button className="theme-btn" onClick={actualizar} disabled={cargando} aria-label="Actualizar datos en vivo" title="Actualizar con datos en vivo de CENACE y la última cota de Mazar">{cargando ? '…' : '↻'}</button>
           <button className="theme-btn" onClick={toggle} aria-label="Cambiar tema">{dark ? '☀︎' : '☾'}</button>
         </div>
       </header>
@@ -57,31 +100,32 @@ export default function App() {
               son bulos. Datos al <b>{fechaLarga}</b>.
             </p>
 
+            <PanelVivo vivo={vivo} cambios={cambios} cargando={cargando} error={error} onActualizar={actualizar} fechaGuardada={FECHA_CORTE} />
+
             <div className="card" style={{ marginTop: 16 }}>
               <div className="status" style={{ fontSize: 15 }}>
                 <span className={`dot lv${dom7}`} style={{ width: 14, height: 14 }} />
                 Próximos 7 días: {NIVELES[dom7].largo.toLowerCase()}
               </div>
               <p style={{ marginTop: 8, marginBottom: 0 }}>
-                Mazar está en <b>{E.cotaMazar.toFixed(2)} msnm</b>, a <b>{(E.cotaMazar - umbrales.critica).toFixed(1)} m</b> de su cota crítica, y perdió 78 cm en
-                el último día. Coca Codo Sinclair opera al {Math.round((E.generacionCCS / 1500) * 100)}% por bajo caudal. En el escenario base, la probabilidad de
+                Mazar está en <b>{cotaHoy.toFixed(2)} msnm</b>, a <b>{(cotaHoy - umbrales.critica).toFixed(1)} m</b> de su cota crítica. Coca Codo Sinclair opera al {Math.round((ccsHoy / 1500) * 100)}% de su capacidad por bajo caudal. En el escenario base, la probabilidad de
                 cortes residenciales programados (o algo peor) en los próximos 30 días es <b>{Math.round(pRes30 * 100)}%</b>.
                 Lo que más la mueve: <b>si llueve en la cuenca del Paute</b> en las próximas dos semanas.
               </p>
             </div>
 
             <div className="grid g4">
-              <div className="card kpi"><div className="label">Cota de Mazar</div><div className="value">{E.cotaMazar.toFixed(1)}</div><div className="sub">msnm · crítica {umbrales.critica} · mínima {umbrales.minima}</div></div>
-              <div className="card kpi"><div className="label">Coca Codo Sinclair</div><div className="value">{E.generacionCCS} MW</div><div className="sub">{E.caudalCoca} m³/s de ≈222 necesarios</div></div>
-              <div className="card kpi"><div className="label">Demanda récord</div><div className="value">{E.demandaPicoRecord.toLocaleString('es-EC')} MW</div><div className="sub">10-nov · prom. nov +{(((E.demandaPromedioNov / E.demandaPromedioNov2025) - 1) * 100).toFixed(1)}% interanual</div></div>
-              <div className="card kpi"><div className="label">Importación de Colombia</div><div className="value">≈{E.importacionPromedio} MW</div><div className="sub">máx. {E.importacionMax} MW · {E.precioImportacion.toFixed(2)} USD/kWh</div></div>
+              <div className="card kpi"><div className="label">Cota de Mazar</div><div className="value">{cotaHoy.toFixed(1)}</div><div className="sub">msnm · crítica {umbrales.critica} · mínima {umbrales.minima}</div></div>
+              <div className="card kpi"><div className="label">Coca Codo Sinclair</div><div className="value">{ccsHoy} MW</div><div className="sub">{vivo?.cenace ? 'promedio de ayer (CENACE)' : `${E.caudalCoca} m³/s de ≈222 necesarios`} · capacidad 1.500</div></div>
+              <div className="card kpi"><div className="label">{vivo?.cenace ? 'Demanda máxima (ayer/hoy)' : 'Demanda récord'}</div><div className="value">{demMax.toLocaleString('es-EC')} MW</div><div className="sub">{vivo?.cenace ? `ahora ${Math.round(vivo.cenace.demandaActualMW).toLocaleString('es-EC')} MW · récord 5.400` : `10-nov · prom. nov +${(((E.demandaPromedioNov / E.demandaPromedioNov2025) - 1) * 100).toFixed(1)}% interanual`}</div></div>
+              <div className="card kpi"><div className="label">Importación de Colombia</div><div className="value">≈{Math.round(impHoy)} MW</div><div className="sub">{vivo?.cenace ? 'promedio de ayer (CENACE)' : 'promedio 6–10 nov'} · máx. {E.importacionMax} MW</div></div>
             </div>
 
             <h3 style={{ marginTop: 8 }}>Pronóstico por horizonte (escenario base)</h3>
             <div className="legend">
               {NIVELES.map((n, i) => <span key={i} title={n.desc}><span className={`dot lv${i}`} />{n.largo}</span>)}
             </div>
-            <Horizontes res={base} />
+            <Horizontes res={base} fechaRef={fechaRef} />
 
             <p className="disclaimer">
               Sitio independiente con fines informativos; no está afiliado a CNEL EP, CELEC EP, CENACE ni al Ministerio de Ambiente y Energía.
@@ -91,7 +135,7 @@ export default function App() {
           </div>
         </section>
 
-        <Cuantitativo res={res} params={params} setParams={setParams} />
+        <Cuantitativo res={res} params={params} setParams={setParams} base={paramsBase} serieMazar={serie} fechaRef={fechaRef} />
         <Cualitativo pCuant30={pRes30} />
 
         <section id="mitos">

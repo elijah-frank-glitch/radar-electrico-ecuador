@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import {
   Area, AreaChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { ESCENARIOS, NIVELES, PARAMS_BASE, simular, type Parametros, type Resultado } from '../model/simulacion'
+import { ESCENARIOS, NIVELES, simular, type Parametros, type Resultado } from '../model/simulacion'
 import { tendencia, sumarDias } from '../model/estadistica'
-import { FECHA_CORTE, serieMazar, umbrales, cronologia, fuentes } from '../data/sistema'
+import { FECHA_CORTE, umbrales, cronologia, fuentes, type PuntoCota } from '../data/sistema'
 
 const COLORS = ['var(--s0)', 'var(--s1)', 'var(--s2)', 'var(--s3)']
 const pc = (x: number) => (x < 0.005 ? '<1%' : x > 0.995 ? '>99%' : `${Math.round(x * 100)}%`)
@@ -19,14 +19,14 @@ export function nivelDominante(p: number[]) {
   return 0
 }
 
-export function Horizontes({ res }: { res: Resultado }) {
+export function Horizontes({ res, fechaRef = FECHA_CORTE }: { res: Resultado; fechaRef?: string }) {
   return (
     <div className="horizons">
       {res.horizontes.map((h) => {
         const dom = nivelDominante(h.pPeor)
         return (
           <div className="hz" key={h.dias}>
-            <div className="d">Próximos {h.dias} días · hasta {sumarDias(FECHA_CORTE, h.dias)}</div>
+            <div className="d">Próximos {h.dias} días · hasta {sumarDias(fechaRef, h.dias)}</div>
             <div className="big status"><span className={`dot lv${dom}`} />{NIVELES[dom].corto}</div>
             <div className="bar" role="img" aria-label={NIVELES.map((n, i) => `${n.corto} ${pc(h.pPeor[i])}`).join(', ')}>
               {h.pPeor.map((p, i) => (p > 0.004 ? <span key={i} style={{ width: `${p * 100}%`, background: COLORS[i] }} title={`${NIVELES[i].corto}: ${pc(p)}`} /> : null))}
@@ -91,30 +91,32 @@ function TTProb({ active, payload }: TTProps) {
   )
 }
 
-export default function Cuantitativo({ res, params, setParams }: { res: Resultado; params: Parametros; setParams: (p: Parametros) => void }) {
+export default function Cuantitativo({ res, params, setParams, base, serieMazar, fechaRef }: { res: Resultado; params: Parametros; setParams: (p: Parametros) => void; base: Parametros; serieMazar: PuntoCota[]; fechaRef: string }) {
   const [esc, setEsc] = useState('base')
   const [vista, setVista] = useState<'grafico' | 'tabla'>('grafico')
 
   const cotaData = useMemo(() => {
-    const t0 = Date.parse(FECHA_CORTE + 'T00:00:00Z')
+    const t0 = Date.parse(fechaRef + 'T00:00:00Z')
     const obs = serieMazar.filter((p) => p.fecha >= '2026-09-25').map((p) => {
       const d = Math.round((Date.parse(p.fecha + 'T00:00:00Z') - t0) / 86400000)
-      return { d, fechaTxt: sumarDias(FECHA_CORTE, d), obs: p.cota }
+      return { d, fechaTxt: sumarDias(fechaRef, d), obs: p.cota }
     })
     const sim = res.porDia.map((x) => ({
-      d: x.dia, fechaTxt: sumarDias(FECHA_CORTE, x.dia),
+      d: x.dia, fechaTxt: sumarDias(fechaRef, x.dia),
       p5: x.cota[0], p25: x.cota[1], p50: x.cota[2], p75: x.cota[3], p95: x.cota[4],
       b90: [x.cota[0], x.cota[4]], b50: [x.cota[1], x.cota[3]],
     }))
     const hoy = obs[obs.length - 1]
     return [...obs.slice(0, -1), { ...hoy, p5: hoy.obs, p25: hoy.obs, p50: hoy.obs, p75: hoy.obs, p95: hoy.obs, b90: [hoy.obs, hoy.obs], b50: [hoy.obs, hoy.obs] }, ...sim]
-  }, [res])
+  }, [res, serieMazar, fechaRef])
 
   const probData = useMemo(() => res.porDia.map((x) => ({
-    dia: x.dia, fechaTxt: sumarDias(FECHA_CORTE, x.dia), n0: x.pNivel[0], n1: x.pNivel[1], n2: x.pNivel[2], n3: x.pNivel[3], margen: x.margen[2],
-  })), [res])
+    dia: x.dia, fechaTxt: sumarDias(fechaRef, x.dia), n0: x.pNivel[0], n1: x.pNivel[1], n2: x.pNivel[2], n3: x.pNivel[3], margen: x.margen[2],
+  })), [res, fechaRef])
 
-  const recientes = serieMazar.filter((p) => p.fecha >= '2026-11-08')
+  const ultimaFecha = serieMazar[serieMazar.length - 1].fecha
+  const desde = new Date(Date.parse(ultimaFecha + 'T00:00:00Z') - 11 * 86400000).toISOString().slice(0, 10)
+  const recientes = serieMazar.filter((p) => p.fecha >= desde)
   const tend = tendencia(recientes, umbrales.critica)
   const tendOct = tendencia(serieMazar.filter((p) => p.fecha >= '2026-09-29' && p.fecha <= '2026-10-12'), umbrales.critica)
 
@@ -134,7 +136,7 @@ export default function Cuantitativo({ res, params, setParams }: { res: Resultad
           <div className="chips" role="group" aria-label="Escenarios">
             {ESCENARIOS.map((e) => (
               <button key={e.id} className="chip" aria-pressed={esc === e.id} title={e.desc}
-                onClick={() => { setEsc(e.id); setParams({ ...PARAMS_BASE, ...e.cambios }) }}>{e.nombre}</button>
+                onClick={() => { setEsc(e.id); setParams({ ...base, ...e.cambios }) }}>{e.nombre}</button>
             ))}
           </div>
           <div className="controls">
@@ -147,7 +149,7 @@ export default function Cuantitativo({ res, params, setParams }: { res: Resultad
           </div>
         </div>
 
-        <Horizontes res={res} />
+        <Horizontes res={res} fechaRef={fechaRef} />
 
         <div className="grid g2" style={{ marginTop: 16 }}>
           <div className="card">
@@ -162,7 +164,7 @@ export default function Cuantitativo({ res, params, setParams }: { res: Resultad
               <ResponsiveContainer>
                 <ComposedChart data={cotaData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <CartesianGrid stroke="var(--grid)" vertical={false} />
-                  <XAxis dataKey="d" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(d) => sumarDias(FECHA_CORTE, d)} stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} />
+                  <XAxis dataKey="d" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(d) => sumarDias(fechaRef, d)} stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} />
                   <YAxis domain={[2110, 2140]} stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} allowDataOverflow />
                   <Tooltip content={<TTCota />} />
                   <Area dataKey="b90" stroke="none" fill="var(--band)" fillOpacity={0.45} isAnimationActive={false} />
@@ -191,7 +193,7 @@ export default function Cuantitativo({ res, params, setParams }: { res: Resultad
                 <ResponsiveContainer>
                   <AreaChart data={probData} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid stroke="var(--grid)" vertical={false} />
-                    <XAxis dataKey="dia" stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} tickFormatter={(d) => sumarDias(FECHA_CORTE, d)} />
+                    <XAxis dataKey="dia" stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} tickFormatter={(d) => sumarDias(fechaRef, d)} />
                     <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} stroke="var(--axis)" tick={{ fill: 'var(--muted)', fontSize: 12 }} />
                     <Tooltip content={<TTProb />} />
                     {[0, 1, 2, 3].map((i) => (
@@ -222,15 +224,15 @@ export default function Cuantitativo({ res, params, setParams }: { res: Resultad
             <table>
               <thead><tr><th>Periodo</th><th className="num">Pendiente</th><th className="num">IC 95%</th><th className="num">R²</th></tr></thead>
               <tbody>
-                <tr><td>8–19 nov (n={tend.n})</td><td className="num">{tend.pendiente.toFixed(2)} m/día</td><td className="num">{tend.ic[0].toFixed(2)} a {tend.ic[1].toFixed(2)}</td><td className="num">{tend.r2.toFixed(2)}</td></tr>
+                <tr><td>Últimos 12 días (n={tend.n})</td><td className="num">{tend.pendiente.toFixed(2)} m/día</td><td className="num">{tend.ic[0].toFixed(2)} a {tend.ic[1].toFixed(2)}</td><td className="num">{tend.r2.toFixed(2)}</td></tr>
                 <tr><td>29 sep–12 oct (n={tendOct.n})</td><td className="num">{tendOct.pendiente.toFixed(2)} m/día</td><td className="num">{tendOct.ic[0].toFixed(2)} a {tendOct.ic[1].toFixed(2)}</td><td className="num">{tendOct.r2.toFixed(2)}</td></tr>
               </tbody>
             </table>
             <div className="callout">
-              Al ritmo de noviembre, Mazar llegaría a 2115 msnm en <b>≈{tend.diasACritica?.toFixed(0)} días</b> ({tend.diasACritica ? sumarDias(FECHA_CORTE, tend.diasACritica) : '—'});
+              Al ritmo de las últimas observaciones, Mazar llegaría a 2115 msnm en <b>≈{tend.diasACritica?.toFixed(0)} días</b> ({tend.diasACritica ? sumarDias(fechaRef, tend.diasACritica) : '—'});
               con el intervalo de confianza, entre {tend.diasACriticaIC[0]?.toFixed(0)} y {tend.diasACriticaIC[1] ? tend.diasACriticaIC[1].toFixed(0) : 'más de 60'} días.
               La simulación, que añade lluvias aleatorias y la operación de las centrales, da una mediana de{' '}
-              <b>{res.diaMedianoCritica ? `${res.diaMedianoCritica} días (${sumarDias(FECHA_CORTE, res.diaMedianoCritica)})` : 'no cruzarla en 60 días'}</b>.
+              <b>{res.diaMedianoCritica ? `${res.diaMedianoCritica} días (${sumarDias(fechaRef, res.diaMedianoCritica)})` : 'no cruzarla en 60 días'}</b>.
             </div>
             <p className="small">Lectura: la hipótesis “Mazar no está bajando” se rechaza (el intervalo no incluye 0). Que la tendencia siga depende casi solo de las lluvias en la cuenca del Paute.</p>
           </div>

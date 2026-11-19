@@ -169,3 +169,10 @@ footer { padding: 32px 0 48px; color: var(--muted); font-size: 13px; }
   .card { padding: 14px; }
   .timeline li { grid-template-columns: 70px 1fr; }
 }
+
+.live-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.btn-primary {
+  background: var(--ink); color: var(--surface); border: 0; border-radius: 10px; padding: 10px 16px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.btn-primary:disabled, .theme-btn:disabled { opacity: .6; cursor: progress; }
+.btn-primary:hover:not(:disabled) { opacity: .88; }

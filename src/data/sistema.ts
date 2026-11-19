@@ -54,9 +54,19 @@ export const fuentes: Record<string, Fuente> = {
     fecha: '2026-11-04',
   },
   elcomercio17nov: {
-    medio: 'El Comercio — Mazar vuelve a perder agua',
-    url: 'https://www.elcomercio.com/actualidad/negocios/embalse-mazar-vuelve-perder-agua-acerca-nivel-critico-17-noviembre/',
+    medio: 'El Comercio — cota diaria de Mazar en noviembre',
+    url: 'https://www.elcomercio.com/actualidad/negocios/cota-de-mazar-bajo-mas-de-cuatro-metros-y-medio-en-los-ultimos-ocho-dias-2026/',
     fecha: '2026-11-17',
+  },
+  elmercurio19oct: {
+    medio: 'El Mercurio — Mazar llega a 2.121 metros',
+    url: 'https://elmercurio.com.ec/?p=1286645',
+    fecha: '2026-10-19',
+  },
+  extra26oct: {
+    medio: 'Extra — Mazar recupera agua (26-oct)',
+    url: 'https://www.extra.ec/noticia/economia/mazar-recupera-agua-sigue-8-94-metros-nivel-critico-166047.html',
+    fecha: '2026-10-26',
   },
   lupa: {
     medio: 'Lupa Media (verificación)',
@@ -115,10 +125,12 @@ export const serieMazar: PuntoCota[] = [
   { fecha: '2026-09-29', cota: 2132.94, tipo: 'reportado', fuente: 'primicias30sep' },
   { fecha: '2026-10-02', cota: 2131.0, tipo: 'reportado', fuente: 'ecuadorChequea' },
   { fecha: '2026-10-12', cota: 2124.99, tipo: 'reportado', nota: 'Mínimo de 2026 hasta esa fecha', fuente: 'expreso12oct' },
-  { fecha: '2026-10-27', cota: 2120.9, tipo: 'estimado', nota: 'Mínimo de octubre (≈7 m bajo la cota del 4-nov)', fuente: 'eldiario4nov' },
+  { fecha: '2026-10-19', cota: 2121.0, tipo: 'reportado', nota: 'Mínimo de octubre (≈2121–2122 según el medio)', fuente: 'elmercurio19oct' },
+  { fecha: '2026-10-26', cota: 2123.94, tipo: 'reportado', nota: 'Recuperación tras el mínimo de octubre', fuente: 'extra26oct' },
+  { fecha: '2026-11-01', cota: 2125.9, tipo: 'reportado', fuente: 'elcomercio17nov' },
   { fecha: '2026-11-04', cota: 2127.9, tipo: 'reportado', nota: 'Recuperación por lluvias del feriado', fuente: 'eldiario4nov' },
-  { fecha: '2026-11-08', cota: 2126.7, tipo: 'estimado', nota: 'Inicio de la caída de 5,32 m (8–17 nov)', fuente: 'elcomercio17nov' },
-  { fecha: '2026-11-17', cota: 2121.4, tipo: 'estimado', fuente: 'elcomercio17nov' },
+  { fecha: '2026-11-08', cota: 2127.3, tipo: 'reportado', nota: 'Inicio de la caída', fuente: 'elcomercio17nov' },
+  { fecha: '2026-11-16', cota: 2122.67, tipo: 'reportado', fuente: 'elcomercio17nov' },
   { fecha: '2026-11-18', cota: 2120.79, tipo: 'reportado', fuente: 'elcomercio19nov' },
   { fecha: '2026-11-19', cota: 2120.01, tipo: 'reportado', nota: '−78 cm en 24 h; Mazar con una sola turbina', fuente: 'elcomercio19nov' },
 ]
