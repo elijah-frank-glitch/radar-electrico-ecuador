@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { consensoPonderado, fuentesOpinion, regresionAcierto, type Tipo } from '../data/expertos'
+import { auto, consensoPonderado, fuentesOpinion, regresionAcierto, type Tipo } from '../data/expertos'
+import { AvisoAuto, EtiquetaAuto } from './Auto'
 
 const pc = (x: number) => `${Math.round(x * 100)}%`
 const TIPOS: Record<Tipo, string> = { experto: 'Experto', gobierno: 'Gobierno', institucion: 'Institución' }
@@ -29,6 +30,7 @@ export default function Cualitativo({ pCuant30 }: { pCuant30: number }) {
           Recopilamos {totalPred} pronósticos públicos de {fuentesOpinion.length} expertos, autoridades e instituciones en 2026 y los
           contrastamos con lo que realmente pasó. Con ese historial calculamos cuánto pesa la opinión de cada uno en el consenso.
         </p>
+        <AvisoAuto actualizado={auto.actualizado} />
 
         <div className="grid g4">
           <div className="card kpi">
@@ -77,17 +79,17 @@ export default function Cualitativo({ pCuant30 }: { pCuant30: number }) {
                 {filas.map(({ f, s }) => (
                   <tr key={f.id}>
                     <td>
-                      <b>{f.nombre}</b> <span className="tag">{TIPOS[f.tipo]}</span>{f.conflictoInteres && <> <span className="tag" title="Incentivo institucional o político: peso ×0,75">conflicto de interés</span></>}
+                      <b>{f.nombre}</b> <span className="tag">{TIPOS[f.tipo]}</span>{f.conflictoInteres && <> <span className="tag" title="Incentivo institucional o político: peso ×0,75">conflicto de interés</span></>}{f.nueva && <> <EtiquetaAuto texto="fuente nueva" /></>}
                       <div className="small">{f.rol}</div>
                       <details>
                         <summary>Ver {f.predicciones.length} pronóstico(s)</summary>
-                        <p className="small" style={{ marginTop: 6 }}>Postura actual: {f.postura}</p>
+                        <p className="small" style={{ marginTop: 6 }}>Postura actual: {f.postura}{f.posturaAuto && <> <EtiquetaAuto fecha={f.posturaAuto.agregado} cita={f.posturaAuto.cita} /> <a href={f.posturaAuto.url} target="_blank" rel="noreferrer">fuente</a></>}</p>
                         {f.predicciones.map((p, i) => {
                           const n = notaTxt(p.nota)
                           return (
                             <div className="pred" key={i} style={{ borderLeftColor: n.c }}>
                               <div><span className="small">{p.fecha}</span> — {p.dice}</div>
-                              <div className="res"><b style={{ color: n.c }}>{n.t}.</b> {p.ocurrio} <a className="src" href={p.url} target="_blank" rel="noreferrer">fuente</a></div>
+                              <div className="res"><b style={{ color: n.c }}>{n.t}.</b> {p.ocurrio} <a className="src" href={p.url} target="_blank" rel="noreferrer">fuente</a>{p.auto && <> <EtiquetaAuto fecha={p.auto.agregado} cita={p.auto.cita} /></>}</div>
                             </div>
                           )
                         })}

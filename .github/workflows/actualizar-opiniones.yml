@@ -1,0 +1,49 @@
+name: Actualizar expertos y mitos
+
+# Cada día revisa noticias y verificaciones, y agrega pronósticos, posturas, recalificaciones y mitos
+# (con cita textual comprobada). Si hay cambios, hace commit y Vercel vuelve a desplegar la web.
+on:
+  schedule:
+    - cron: '0 13 * * *' # 08:00 en Ecuador
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: actualizar-opiniones
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Analizar noticias con Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run actualizar:opiniones
+
+      - name: Comprobar que la web compila con los datos nuevos
+        run: npm run build
+
+      - name: Publicar cambios
+        run: |
+          if git diff --quiet -- src/data/auto/opiniones.json; then
+            echo "Sin cambios."
+            exit 0
+          fi
+          git config user.name "radar-electrico-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/auto/opiniones.json
+          git commit -m "Actualización automática de expertos y mitos ($(date -u +%Y-%m-%d))"
+          git push

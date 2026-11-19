@@ -176,3 +176,4 @@ footer { padding: 32px 0 48px; color: var(--muted); font-size: 13px; }
 }
 .btn-primary:disabled, .theme-btn:disabled { opacity: .6; cursor: progress; }
 .btn-primary:hover:not(:disabled) { opacity: .88; }
+.tag-auto { border-color: var(--accent); color: var(--accent); cursor: help; }

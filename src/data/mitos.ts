@@ -1,3 +1,6 @@
+import autoJson from './auto/opiniones.json'
+import type { AutoOpiniones } from './auto/tipos'
+
 export type Veredicto = 'bulo' | 'enganoso' | 'malentendido' | 'demostrado' | 'no-demostrado'
 
 export const VEREDICTOS: Record<Veredicto, { etiqueta: string; desc: string }> = {
@@ -14,9 +17,10 @@ export type Mito = {
   base: 'datos' | 'estudios' | 'opiniones' | 'verificadores'
   explicacion: string
   fuentes: { medio: string; url: string }[]
+  auto?: { agregado: string; cita: string }
 }
 
-export const mitos: Mito[] = [
+export const mitosBase: Mito[] = [
   {
     afirmacion: '“El Gobierno anunció apagones de 2 horas en todo el país.”',
     veredicto: 'enganoso',
@@ -110,4 +114,19 @@ export const mitos: Mito[] = [
       { medio: 'Primicias (Cenace, ene-2026)', url: 'https://www.primicias.ec/economia/proyeccion-sistema-electrico-crisis-embalse-mazar-caida-112842/' },
     ],
   },
+]
+
+const auto = autoJson as AutoOpiniones
+export const mitos: Mito[] = [
+  ...mitosBase,
+  ...auto.mitos
+    .filter((a) => !mitosBase.some((b) => b.fuentes.some((f) => f.url === a.url)))
+    .map((a) => ({
+      afirmacion: a.afirmacion,
+      veredicto: a.veredicto,
+      base: a.base,
+      explicacion: a.explicacion,
+      fuentes: [{ medio: a.medio, url: a.url }],
+      auto: { agregado: a.agregado, cita: a.cita },
+    })),
 ]

@@ -3,6 +3,9 @@
 // La calificación es una evaluación propia de este sitio con base en lo ocurrido hasta FECHA_CORTE;
 // cada ítem enlaza a la fuente para que cualquiera pueda revisarla.
 
+import autoJson from './auto/opiniones.json'
+import type { AutoOpiniones } from './auto/tipos'
+
 export type Tipo = 'experto' | 'gobierno' | 'institucion'
 
 export type Prediccion = {
@@ -12,6 +15,7 @@ export type Prediccion = {
   nota: number | null
   especificidad: 1 | 2 | 3 // 1 = vago, 2 = con plazo o condición, 3 = cuantitativo con plazo
   url: string
+  auto?: { agregado: string; cita?: string } // agregado o recalificado automáticamente
 }
 
 export type Fuente = {
@@ -23,6 +27,8 @@ export type Fuente = {
   postura: string // postura más reciente
   pResidencial30: number // probabilidad implícita (estimada por este sitio) de cortes residenciales programados en 30 días según su postura actual
   predicciones: Prediccion[]
+  posturaAuto?: { agregado: string; url: string; cita: string }
+  nueva?: boolean
 }
 
 const U = {
@@ -44,7 +50,7 @@ const U = {
   gestion: 'https://www.primicias.ec/revistagestion/analisis/ecuador-evita-apagones-sigue-pagando-costo-crisis-electrica-que-resuelto-137185/',
 }
 
-export const fuentesOpinion: Fuente[] = [
+export const fuentesBase: Fuente[] = [
   {
     id: 'salinas',
     nombre: 'Fernando Salinas',
@@ -212,6 +218,40 @@ export const fuentesOpinion: Fuente[] = [
     ],
   },
 ]
+
+// --- Fusión con lo que agrega la actualización automática diaria ---
+export const auto = autoJson as AutoOpiniones
+
+function fusionar(base: Fuente[], a: AutoOpiniones): Fuente[] {
+  const fs = base.map((f) => ({ ...f, predicciones: [...f.predicciones] }))
+  const porId = new Map(fs.map((f) => [f.id, f]))
+  for (const n of a.fuentesNuevas) {
+    if (porId.has(n.id)) continue
+    const f: Fuente = { ...n, postura: '', pResidencial30: 0.5, predicciones: [], nueva: true }
+    fs.push(f)
+    porId.set(n.id, f)
+  }
+  for (const r of a.reevaluaciones) {
+    const p = porId.get(r.fuenteId)?.predicciones.find((x) => x.dice === r.dice && x.nota === null)
+    if (p) Object.assign(p, { nota: r.nota, ocurrio: r.ocurrio, auto: { agregado: r.agregado } })
+  }
+  for (const p of a.predicciones) {
+    const f = porId.get(p.fuenteId)
+    if (!f || f.predicciones.some((x) => x.url === p.url && x.dice === p.dice)) continue
+    f.predicciones.push({ fecha: p.fecha, dice: p.dice, ocurrio: 'Pendiente de verificar.', nota: null, especificidad: p.especificidad, url: p.url, auto: { agregado: p.agregado, cita: p.cita } })
+  }
+  for (const p of a.posturas) {
+    const f = porId.get(p.fuenteId)
+    if (!f) continue
+    f.postura = p.postura
+    f.pResidencial30 = p.pResidencial30
+    f.posturaAuto = { agregado: p.agregado, url: p.url, cita: p.cita }
+  }
+  // Una fuente nueva sin postura ni pronósticos no aporta nada
+  return fs.filter((f) => f.predicciones.length > 0 && f.postura)
+}
+
+export const fuentesOpinion: Fuente[] = fusionar(fuentesBase, auto)
 
 // --- Puntuación ---
 // Acierto bayesiano con prior Beta(1,1): (aciertos + 1) / (n + 2). Penaliza muestras chicas.

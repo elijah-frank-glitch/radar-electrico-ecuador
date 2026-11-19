@@ -6,6 +6,8 @@ import { FECHA_CORTE, estadoActual as E, umbrales, fuentes, serieMazar } from '.
 import { aplicarDatos, pedirDatos, type Cambio, type DatosVivo } from './model/enVivo'
 import PanelVivo from './components/PanelVivo'
 import { mitos, VEREDICTOS, type Veredicto } from './data/mitos'
+import { auto } from './data/expertos'
+import { AvisoAuto, EtiquetaAuto } from './components/Auto'
 
 function useTheme() {
   const [theme, setTheme] = useState<string | null>(() => {
@@ -142,6 +144,7 @@ export default function App() {
           <div className="wrap">
             <h2>Mitos, bulos y lo que sí está demostrado</h2>
             <p className="lede">Lo que circula en redes, contrastado con datos, estudios y verificadores.</p>
+            <AvisoAuto actualizado={auto.actualizado} />
             <div className="filter-row">
               <button className="chip" aria-pressed={filtroMito === 'todos'} onClick={() => setFiltroMito('todos')}>Todos ({mitos.length})</button>
               {(Object.keys(VEREDICTOS) as Veredicto[]).map((v) => (
@@ -159,7 +162,7 @@ export default function App() {
                   </div>
                   <h3>{m.afirmacion}</h3>
                   <p style={{ color: 'var(--ink-2)', fontSize: 14 }}>{m.explicacion}</p>
-                  <div className="src">{m.fuentes.map((f, i) => <span key={f.url}>{i > 0 && ' · '}<a href={f.url} target="_blank" rel="noreferrer">{f.medio}</a></span>)}</div>
+                  <div className="src">{m.fuentes.map((f, i) => <span key={f.url}>{i > 0 && ' · '}<a href={f.url} target="_blank" rel="noreferrer">{f.medio}</a></span>)}{m.auto && <> <EtiquetaAuto fecha={m.auto.agregado} cita={m.auto.cita} /></>}</div>
                 </article>
               ))}
             </div>

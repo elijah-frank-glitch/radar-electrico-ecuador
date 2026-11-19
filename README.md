@@ -17,7 +17,18 @@ La app llama a `/api/datos` (función serverless en `api/datos.ts`) al abrirse y
 
 Con esos datos se ajustan los supuestos del modelo (cota inicial, caudal efectivo de Coca Codo, demanda pico, probabilidad de importación, capacidad térmica) y se vuelve a simular. La respuesta se guarda 30 min en la CDN de Vercel, así que muchos clics no saturan a las fuentes. Si una fuente falla, se usan los datos guardados.
 
-Las calificaciones de expertos y los mitos **no** se actualizan solos: requieren revisión humana.
+## Expertos y mitos automáticos
+
+El workflow [`.github/workflows/actualizar-opiniones.yml`](.github/workflows/actualizar-opiniones.yml) corre cada día a las 08:00 (Ecuador) y ejecuta `scripts/actualizar-opiniones.ts`:
+
+1. Junta las notas de los últimos 10 días sobre electricidad/apagones de El Comercio, Primicias, Lupa Media y Ecuador Chequea.
+2. Claude (`claude-opus-5-5`, salida JSON estructurada) propone pronósticos nuevos, posturas actuales, recalificaciones de pronósticos pendientes y mitos verificados.
+3. Controles en código: la URL debe ser una nota leída, la **cita textual debe aparecer literalmente** en ella, solo se recalifican pronósticos pendientes, máximos por día, sin duplicados.
+4. Guarda el resultado en `src/data/auto/opiniones.json`, hace commit y Vercel redespliega. En la web, todo lo agregado así lleva la etiqueta **⚙ automático** con la cita.
+
+**Para activarlo** hay que agregar el secreto `ANTHROPIC_API_KEY` al repositorio (Settings → Secrets and variables → Actions). Sin el secreto, el workflow termina sin cambios. Costo estimado: unos centavos de dólar por día (≈10 notas por corrida).
+
+Pruebas locales: `npm run actualizar:opiniones -- --prueba` (solo junta notas) o `SALIDA_SIMULADA=archivo.json npm run actualizar:opiniones` (prueba los controles sin llamar a la API).
 
 ## Actualizar los datos guardados
 
