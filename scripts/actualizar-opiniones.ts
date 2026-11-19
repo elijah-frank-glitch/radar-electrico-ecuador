@@ -74,12 +74,25 @@ async function json<T>(url: string): Promise<T> {
 type WpPost = { id: number; date_gmt: string; link: string; title: { rendered: string }; excerpt?: { rendered: string } }
 
 // Sitios WordPress: lista liviana, filtro por tema en el título/resumen, luego el contenido solo de los elegidos
-async function deWordpress(base: string, medio: string, desde: string, consultasExtra: string[] = []): Promise<Articulo[]> {
+async function deWordpress(base: string, medio: string, desde: string, consultasExtra: string[] = [], rssRespaldo?: string): Promise<Articulo[]> {
   // Últimas 100 notas + consultas extra (p. ej. etiquetas), sin duplicados
   const campos = `after=${desde}T00:00:00&_fields=id,date_gmt,link,title,excerpt`
   const consultas = [`per_page=100&${campos}`, ...consultasExtra.map((q) => `${q}&per_page=30&${campos}`)]
-  const listas = await Promise.all(consultas.map((q) => json<WpPost[]>(`${base}/wp-json/wp/v2/posts?${q}`).catch(() => [] as WpPost[])))
-  const lista = [...new Map(listas.flat().map((p) => [p.id, p])).values()].sort((a, b) => b.date_gmt.localeCompare(a.date_gmt))
+  const errores: string[] = []
+  const listas = await Promise.all(
+    consultas.map((q) =>
+      json<WpPost[]>(`${base}/wp-json/wp/v2/posts?${q}`).catch((e) => {
+        errores.push((e as Error).message)
+        return null
+      }),
+    ),
+  )
+  if (listas.every((l) => l === null)) {
+    console.warn(`  · ${medio}: la API de WordPress no respondió (${errores.join('; ')})`)
+    if (rssRespaldo) return deRss(rssRespaldo, medio, desde, 6)
+    throw new Error(errores[0] ?? 'sin respuesta')
+  }
+  const lista = [...new Map(listas.flatMap((l) => l ?? []).map((p) => [p.id, p])).values()].sort((a, b) => b.date_gmt.localeCompare(a.date_gmt))
   const elegidos = lista.filter((p) => TEMA.test(limpiar(p.title.rendered) + ' ' + limpiar(p.excerpt?.rendered ?? '')))
   const out: Articulo[] = []
   for (const p of elegidos.slice(0, 6)) {
@@ -101,8 +114,11 @@ async function deWordpress(base: string, medio: string, desde: string, consultas
   return out
 }
 
-async function dePrimicias(desde: string): Promise<Articulo[]> {
-  const xml = await (await fetch('https://www.primicias.ec/rss/economia.xml', { headers: UA, signal: AbortSignal.timeout(20000) })).text()
+// Feed RSS genérico: filtra por tema y lee el cuerpo de cada nota desde su página
+async function deRss(feed: string, medio: string, desde: string, max = 4): Promise<Articulo[]> {
+  const r = await fetch(feed, { headers: UA, signal: AbortSignal.timeout(20000) })
+  if (!r.ok) throw new Error(`HTTP ${r.status} en ${feed}`)
+  const xml = await r.text()
   const items = xml.split('<item>').slice(1)
   const campo = (x: string, t: string) => {
     const a = x.indexOf('<' + t)
@@ -115,17 +131,19 @@ async function dePrimicias(desde: string): Promise<Articulo[]> {
   for (const it of items) {
     const titulo = limpiar(campo(it, 'title'))
     const url = campo(it, 'link').trim()
-    const fecha = new Date(campo(it, 'pubDate')).toISOString().slice(0, 10)
+    const d = new Date(campo(it, 'pubDate'))
+    if (Number.isNaN(d.getTime())) continue
+    const fecha = d.toISOString().slice(0, 10)
     if (fecha < desde || vistos.has(url) || !TEMA.test(titulo + ' ' + campo(it, 'description'))) continue
     vistos.add(url)
     try {
       const html = await (await fetch(url, { headers: UA, signal: AbortSignal.timeout(20000) })).text()
       const texto = cuerpoDeHtml(html)
-      if (texto.length >= 300) out.push({ url, medio: 'Primicias', titulo, fecha, texto: texto.slice(0, MAX_CHARS) })
+      if (texto.length >= 300) out.push({ url, medio, titulo, fecha, texto: texto.slice(0, MAX_CHARS) })
     } catch (e) {
-      console.warn(`  · Primicias: no se pudo leer ${url}: ${(e as Error).message}`)
+      console.warn(`  · ${medio}: no se pudo leer ${url}: ${(e as Error).message}`)
     }
-    if (out.length >= 4) break
+    if (out.length >= max) break
     await esperar(1000)
   }
   return out
@@ -133,8 +151,8 @@ async function dePrimicias(desde: string): Promise<Articulo[]> {
 
 async function juntarArticulos(desde: string, yaRevisados: Set<string>): Promise<Articulo[]> {
   const fuentes: [string, () => Promise<Articulo[]>][] = [
-    ['El Comercio', () => deWordpress('https://www.elcomercio.com', 'El Comercio', desde, ['tags=107601,30880'])],
-    ['Primicias', () => dePrimicias(desde)],
+    ['El Comercio', () => deWordpress('https://www.elcomercio.com', 'El Comercio', desde, ['tags=107601,30880'], 'https://www.elcomercio.com/feed/')],
+    ['Primicias', () => deRss('https://www.primicias.ec/rss/economia.xml', 'Primicias', desde)],
     ['Lupa Media', () => deWordpress('https://lupa.com.ec', 'Lupa Media (verificador)', desde)],
     ['Ecuador Chequea', () => deWordpress('https://ecuadorchequea.com', 'Ecuador Chequea (verificador)', desde)],
   ]
